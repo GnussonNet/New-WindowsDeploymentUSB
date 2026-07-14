@@ -223,7 +223,6 @@ if ($null -ne $AutoUnattend) {
 
     if ($LASTEXITCODE -gt 7) {
         Write-Host "Failed copying autounattend.xml." -ForegroundColor Red
-        exit 1
     }
 }
 
@@ -235,7 +234,7 @@ if ($null -ne $OEMFolder) {
 
     robocopy `
         $OEMFolder `
-        "$InstallLetter`:\sources\`$OEM`$" `
+        "$InstallLetter`:\$([char]36)OEM$([char]36)" `
         /E `
         /COPY:DAT `
         /R:2 `
@@ -243,7 +242,6 @@ if ($null -ne $OEMFolder) {
 
     if ($LASTEXITCODE -gt 7) {
         Write-Host "Failed copying `$OEM$ folder." -ForegroundColor Red
-        exit 1
     }
 }
 
