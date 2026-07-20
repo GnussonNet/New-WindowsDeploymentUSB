@@ -1,50 +1,62 @@
 # Build-GoldenImageMedia
 
-PowerShell tool for creating custom **UEFI Windows deployment USB media** from a Windows ISO and a custom Windows image.
+PowerShell tool for creating a bootable **UEFI Windows deployment USB** from a Windows ISO.
 
 The script creates a GPT-partitioned USB drive with:
 
 - A small **FAT32 EFI boot partition** for UEFI firmware compatibility
-- A large **NTFS installation partition** for Windows setup files and custom deployment content
+- A large **NTFS installation partition** for Windows setup files and easy customization
 
-This allows the use of large `install.wim` files without splitting while maintaining compatibility with modern UEFI systems.
+This layout keeps the media bootable while giving full read/write access to the NTFS partition so you can manually add or replace deployment files like `install.wim`, `autounattend.xml`, and `$OEM$` at any time.
 
-## Features
+## What This Tool Does
 
 - Creates bootable Windows installation USB media
 - Supports UEFI-only systems
 - Creates GPT partition layout
 - Creates FAT32 + NTFS dual-partition USB layout
-- Supports custom `install.wim` files larger than 4GB
-- Keeps `install.wim` intact
-- Supports automated deployments using:
-  - `autounattend.xml`
-  - `$OEM$` folders
-- Uses `robocopy` for reliable file transfers
-- Displays detailed copy progress and transfer statistics
-- Designed for custom Windows images and golden image deployments
+- Copies original content from the selected Windows ISO
+- Uses `robocopy` for reliable file transfer
+
+## What This Tool Does Not Do
+
+- Does not inject or replace `install.wim` automatically
+- Does not copy `autounattend.xml` automatically
+- Does not copy `$OEM$` automatically
+
+## Why This Design
+
+The USB is intentionally split into FAT32 + NTFS:
+
+- **FAT32** keeps UEFI boot compatibility
+- **NTFS** gives writable space for large files and easy updates
+
+After creation, you can manually maintain deployment content on the NTFS partition:
+
+- Replace `sources\install.wim` with a newer custom image
+- Add or update `autounattend.xml` in the USB root
+- Add or update `sources\$OEM$` content
+
+This allows fast iteration without recreating the USB every time.
 
 ## USB Layout
 
-The resulting USB drive:
-
-```
+```text
 USB (GPT)
-│
-├── FAT32 (UEFI_BOOT)
-│   ├── bootmgr
-│   ├── boot
-│   ├── efi
-│   └── sources
-│       └── boot.wim
-│
-└── NTFS (WindowsInstall)
-    ├── autounattend.xml
-    ├── setup.exe
-    ├── sources
-    │   ├── install.wim
-    │   └── $OEM$
-    └── Windows installation files
+|
+|-- FAT32 (UEFI_BOOT)
+|   |-- bootmgr
+|   |-- boot
+|   |-- efi
+|   '-- sources
+|       '-- boot.wim
+|
+'-- NTFS (WindowsInstall)
+    |-- setup.exe
+    |-- sources
+    |   |-- install.wim (from ISO by default)
+    |   '-- ...
+    '-- Windows installation files
 ```
 
 ## Requirements
@@ -53,114 +65,50 @@ USB (GPT)
 - PowerShell 5.1 or newer
 - Administrator privileges
 - Windows installation ISO
-- Custom `install.wim`
-- Optional:
-  - `autounattend.xml`
-  - `$OEM$` folder
+- USB drive (will be fully erased)
 
 ## Usage
 
 Run PowerShell as Administrator:
 
-```
+```powershell
 .\New-WindowsDeploymentUSB.ps1
 ```
 
-The script will ask you to select:
+The script will prompt for:
 
 1. Windows ISO
-2. Custom `install.wim`
-3. Optional `autounattend.xml`
-4. Optional `$OEM$` folder
-5. Target USB drive
+2. Target USB drive
 
 The selected USB drive will be completely erased and recreated.
 
-## Deployment Workflow
+## Manual Customization Workflow (Optional)
 
-A typical golden image deployment workflow:
+After USB creation, open the NTFS partition and copy your deployment assets manually:
 
-### 1. Capture a reference installation
+1. Custom image:
 
-Create your custom image:
-
-```
-install.wim
+```text
+<NTFS>:\sources\install.wim
 ```
 
-### 2. Prepare deployment files
+2. Unattended setup file:
 
-Example structure:
-
-```
-autounattend.xml
-$OEM$
-├── $1
-│   └── Scripts
-│       └── Setup.ps1
-└── $$
-    └── Setup
-        └── Configuration files
+```text
+<NTFS>:\autounattend.xml
 ```
 
-### 3. Create deployment USB
+3. OEM provisioning content:
 
-Run the script and select:
+```text
+<NTFS>:\sources\$OEM$
+```
 
-- Windows ISO
-- Custom install.wim
-- Deployment automation files
-
-### 4. Deploy
-
-Boot the target computer from USB and allow Windows Setup to apply the custom image.
-
-## Why FAT32 + NTFS?
-
-UEFI firmware typically requires a FAT32-readable boot partition.
-
-However, FAT32 has a maximum file size limit of 4GB, which prevents storing many modern `install.wim` files.
-
-This project separates the USB into two partitions:
-
-- FAT32:
-  - UEFI boot files
-  - Windows PE boot environment
-
-- NTFS:
-  - Windows installation files
-  - Large `install.wim`
-  - Deployment customization files
-
-This avoids the need to split images into `install.swm` files.
+To update later, just replace files with new versions.
 
 ## Notes
 
-- This project supports UEFI systems only.
-- Legacy BIOS boot is not supported.
-- The USB drive will be wiped completely.
+- UEFI-only. Legacy BIOS is not supported.
+- The USB drive is wiped completely.
 - Always verify the selected disk before confirming.
 - Administrator privileges are required.
-
-## Troubleshooting
-
-### Windows Setup cannot find the installation image
-
-Verify that:
-
-```
-USB:\sources\install.wim
-```
-
-exists on the NTFS partition.
-
-### `$OEM$` files are not applied
-
-Verify the folder structure:
-
-```
-sources
-└── $OEM$
-    ├── $1
-    └── $$
-```
