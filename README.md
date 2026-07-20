@@ -101,7 +101,7 @@ After USB creation, open the NTFS partition and copy your deployment assets manu
 3. OEM provisioning content:
 
 ```text
-<NTFS>:\sources\$OEM$
+<NTFS>:\$OEM$
 ```
 
 To update later, just replace files with new versions.
