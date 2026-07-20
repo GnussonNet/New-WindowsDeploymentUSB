@@ -1,4 +1,4 @@
-# Build-GoldenImageMedia
+# Windows Deployment USB
 
 PowerShell tool for creating a bootable **UEFI Windows deployment USB** from a Windows ISO.
 
