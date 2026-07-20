@@ -35,7 +35,7 @@ After creation, you can manually maintain deployment content on the NTFS partiti
 
 - Replace `sources\install.wim` with a newer custom image
 - Add or update `autounattend.xml` in the USB root
-- Add or update `sources\$OEM$` content
+- Add or update `$OEM$` content
 
 This allows fast iteration without recreating the USB every time.
 
