@@ -44,41 +44,7 @@ function Invoke-RobocopyChecked {
     }
 }
 
-function Invoke-RobocopyWarning {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Source,
 
-        [Parameter(Mandatory = $true)]
-        [string]$Destination,
-
-        [Parameter()]
-        [string[]]$FileList = @(),
-
-        [Parameter(Mandatory = $true)]
-        [string[]]$Options,
-
-        [Parameter(Mandatory = $true)]
-        [string]$FailureMessage,
-
-        [Parameter(Mandatory = $true)]
-        [string]$ItemDescription
-    )
-
-    & robocopy $Source $Destination @FileList @Options
-    if ($LASTEXITCODE -gt 7) {
-        Write-Host ""
-        Write-Host "WARNING: Failed to copy $ItemDescription" -ForegroundColor Yellow
-        Write-Host $FailureMessage -ForegroundColor Yellow
-        Write-Host "This may be due to Data Loss Prevention (DLP) policies blocking the transfer." -ForegroundColor Yellow
-        Write-Host "Options:" -ForegroundColor Yellow
-        Write-Host "  1. Check if DLP is enabled in your organization" -ForegroundColor Yellow
-        Write-Host "  2. Try copying these files manually to the USB drive" -ForegroundColor Yellow
-        Write-Host "  3. Temporarily disable DLP policies if you have permission" -ForegroundColor Yellow
-        Write-Host "The installation USB is still usable; only $ItemDescription are missing." -ForegroundColor Yellow
-        Write-Host ""
-    }
-}
 
 function Select-RequiredFile {
     param(
@@ -109,61 +75,7 @@ function Select-RequiredFile {
     return $fileBrowser.FileName
 }
 
-function Select-OptionalFile {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Filter,
 
-        [Parameter(Mandatory = $true)]
-        [string]$Title,
-
-        [Parameter(Mandatory = $true)]
-        [string]$SkippedMessage
-    )
-
-    $fileBrowser = New-Object System.Windows.Forms.OpenFileDialog -Property @{
-        InitialDirectory = [Environment]::GetFolderPath('Desktop')
-        Filter = $Filter
-        Title = $Title
-    }
-
-    [void]$fileBrowser.ShowDialog()
-
-    if ([string]::IsNullOrWhiteSpace($fileBrowser.FileName)) {
-        Write-Host $SkippedMessage -ForegroundColor Yellow
-        return $null
-    }
-
-    if (-not (Test-Path -LiteralPath $fileBrowser.FileName -PathType Leaf)) {
-        throw "Selected file does not exist: $($fileBrowser.FileName)"
-    }
-
-    return $fileBrowser.FileName
-}
-
-function Select-OptionalFolder {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string]$Description,
-
-        [Parameter(Mandatory = $true)]
-        [string]$SkippedMessage
-    )
-
-    $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-    $folderBrowser.Description = $Description
-
-    if ($folderBrowser.ShowDialog() -eq "OK") {
-        if (-not (Test-Path -LiteralPath $folderBrowser.SelectedPath -PathType Container)) {
-            throw "Selected folder does not exist: $($folderBrowser.SelectedPath)"
-        }
-
-        return $folderBrowser.SelectedPath
-    }
-
-    Write-Host $SkippedMessage -ForegroundColor Yellow
-    return $null
-}
 
 function Select-UsbDisk {
     while ($true) {
@@ -215,22 +127,6 @@ try {
     $ISOFile = Select-RequiredFile `
         -Filter 'Distribution media (*.iso)|*.iso' `
         -Title 'Locate the Windows distribution media image'
-
-    # Select custom install.wim
-    $CustomWIM = Select-RequiredFile `
-        -Filter 'Windows image (*.wim)|install.wim;*.wim' `
-        -Title 'Locate custom install.wim'
-
-    # Select autounattend.xml
-    $AutoUnattend = Select-OptionalFile `
-        -Filter 'Autounattend file (autounattend.xml)|autounattend.xml' `
-        -Title 'Locate autounattend.xml' `
-        -SkippedMessage 'No autounattend.xml selected. Continuing without it.'
-
-    # Select $OEM$ folder
-    $OEMFolder = Select-OptionalFolder `
-        -Description 'Select the `$OEM$ folder' `
-        -SkippedMessage 'No `$OEM$ folder selected. Continuing without it.'
 
     # Select USB drive
     $USBDrive = Select-UsbDisk
@@ -305,7 +201,7 @@ try {
         -PartitionNumber $bootPartition.PartitionNumber `
         -GptType '{C12A7328-F81F-11D2-BA4B-00A0C93EC93B}'
 
-    # Copy Windows files to NTFS except install.wim/install.esd
+    # Copy all ISO content to NTFS installation partition
     Write-Step "Copying Windows installation files to NTFS..."
 
     $sourceISO = "$isoDriveLetter`:\"
@@ -314,46 +210,8 @@ try {
     Invoke-RobocopyChecked `
         -Source $sourceISO `
         -Destination $destination `
-        -Options @('/E', '/XF', 'install.wim', 'install.esd', '/R:1', '/W:1') `
+        -Options @('/E', '/R:1', '/W:1') `
         -FailureMessage 'Failed copying Windows installation files to NTFS.'
-
-    # Copy install.wim
-    Write-Step "Copying custom install.wim..."
-
-    $sourcesFolder = "$installLetter`:\sources"
-    New-Item -Path $sourcesFolder -ItemType Directory -Force | Out-Null
-
-    Invoke-RobocopyChecked `
-        -Source (Split-Path -Path $CustomWIM) `
-        -Destination $sourcesFolder `
-        -FileList @((Split-Path -Path $CustomWIM -Leaf)) `
-        -Options @('/COPY:DAT', '/J', '/R:2', '/W:2') `
-        -FailureMessage 'Failed copying install.wim.'
-
-    # Copy autounattend.xml
-    if ($null -ne $AutoUnattend) {
-        Write-Step "Copying autounattend.xml..."
-
-        Invoke-RobocopyWarning `
-            -Source (Split-Path -Path $AutoUnattend) `
-            -Destination "$installLetter`:" `
-            -FileList @((Split-Path -Path $AutoUnattend -Leaf)) `
-            -Options @('/COPY:DAT', '/R:2', '/W:2') `
-            -FailureMessage 'Failed copying autounattend.xml. Try copying manually to the USB root.' `
-            -ItemDescription 'autounattend.xml'
-    }
-
-    # Copy $OEM$
-    if ($null -ne $OEMFolder) {
-        Write-Step 'Copying `$OEM$ folder...'
-
-        Invoke-RobocopyWarning `
-            -Source $OEMFolder `
-            -Destination "$installLetter`:\$([char]36)OEM$([char]36)" `
-            -Options @('/E', '/COPY:DAT', '/R:2', '/W:2') `
-            -FailureMessage 'Failed copying `$OEM$ folder. Try copying manually to the USB root.' `
-            -ItemDescription '`$OEM$ folder'
-    }
 
     # Copy UEFI boot files to FAT32
     Write-Step "Copying UEFI boot files..."
@@ -387,17 +245,6 @@ try {
         -Path "$isoDriveLetter`:\sources\boot.wim" `
         -Destination "$bootLetter`:\sources\" `
         -Force
-
-    # Validate install.wim
-    if (Test-Path "$installLetter`:\sources\install.wim") {
-        Write-Host "Found install.wim on NTFS partition."
-    }
-    elseif (Test-Path "$installLetter`:\sources\install.esd") {
-        Write-Host "Found install.esd on NTFS partition."
-    }
-    else {
-        Write-Host "WARNING: No install.wim or install.esd found." -ForegroundColor Yellow
-    }
 
     Write-Host ""
     Write-Host "UEFI Windows installation USB created successfully." -ForegroundColor Green
